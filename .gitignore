@@ -2,3 +2,6 @@
 .env
 etvenv/
 github.ipynb
+scripts/__pycache__
+notebooks/scraping_session.session
+notebooks/processed_telegram_data.csv
