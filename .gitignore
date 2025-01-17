@@ -1,3 +1,4 @@
 # Ignore virtual environment directories
 .env
 etvenv/
+github.ipynb
