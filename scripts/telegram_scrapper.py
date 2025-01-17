@@ -1,51 +1,38 @@
-# telegram_scrapper.py
-
-from telethon import TelegramClient
-import csv
 import os
+import re
+import csv
+from telethon import TelegramClient
 from dotenv import load_dotenv
 
-class TelegramScraper:
-    def __init__(self, api_id, api_hash, phone):
+class RealTimeTelegramScraper:
+    def __init__(self):
         load_dotenv('.env')
-        self.api_id = api_id
-        self.api_hash = api_hash
-        self.phone = phone
-        self.client = TelegramClient('scraping_session', self.api_id, self.api_hash)
+        self.api_id = os.getenv('TG_API_ID')
+        self.api_hash = os.getenv('TG_API_HASH')
+        self.client = TelegramClient('real_time_session', self.api_id, self.api_hash)
+        self.data = []
 
-    async def scrape_channel(self, channel_username, writer, media_dir):
-        entity = await self.client.get_entity(channel_username)
-        channel_title = entity.title  # Extract the channel's title
-        
-        async for message in self.client.iter_messages(entity, limit=10000):
-            media_path = None
-            if message.media and hasattr(message.media, 'photo'):
-                # Create a unique filename for the photo
-                filename = f"{channel_username}_{message.id}.jpg"
-                media_path = os.path.join(media_dir, filename)
-                # Download the media to the specified directory if it's a photo
-                await self.client.download_media(message.media, media_path)
-            
-            # Write the channel title along with other data
-            writer.writerow([channel_title, channel_username, message.id, message.message, message.date, media_path])
+    async def message_handler(self, event):
+        message = event.message
+        if message.text and self.is_amharic(message.text):
+            self.data.append({
+                'Channel Username': event.chat.username,
+                'ID': message.id,
+                'Message': message.text,
+                'Date': message.date,
+                'Media Path': None  # Add media handling if needed
+            })
+            print(f"New message from {event.chat.username}: {message.text}")
 
-    async def main(self, channels):
+    @staticmethod
+    def is_amharic(text):
+        return bool(re.search(r'[\u1200-\u137F]', text))  # Amharic Unicode range
+
+    async def run(self, channels):
         await self.client.start()
-        
-        # Create a directory for media files
-        media_dir = 'photos'
-        os.makedirs(media_dir, exist_ok=True)
+        for channel in channels:
+            await self.client.get_entity(channel)  # Ensure the client joins the channel
+        self.client.add_event_handler(self.message_handler, events.NewMessage(chats=channels))
 
-        # Open the CSV file and prepare the writer
-        with open('telegram_data.csv', 'w', newline='', encoding='utf-8') as file:
-            writer = csv.writer(file)
-            writer.writerow(['Channel Title', 'Channel Username', 'ID', 'Message', 'Date', 'Media Path'])  # Include channel title in the header
-            
-            # Iterate over channels and scrape data into the single CSV file
-            for channel in channels:
-                await self.scrape_channel(channel, writer, media_dir)
-                print(f"Scraped data from {channel}")
-
-    def run(self, channels):
-        with self.client:
-            self.client.loop.run_until_complete(self.main(channels))
+        print("Listening for new messages...")
+        await self.client.run_until_disconnected()
